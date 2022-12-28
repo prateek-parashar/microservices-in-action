@@ -1,0 +1,25 @@
+spring:
+  application:
+   name: gateway-server
+  cloud:
+    config:
+      uri: http://localhost:8071
+    gateway:
+      discovery.locator:
+        enabled: true
+        lowerCaseServiceId: true
+    discovery:
+      enabled: true
+
+logging:
+  level:
+    com.netflix: WARN
+    org.springframework.web: WARN
+    com.optimagrowth: DEBUG
+
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
