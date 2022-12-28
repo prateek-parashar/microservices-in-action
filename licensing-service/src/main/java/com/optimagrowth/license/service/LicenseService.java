@@ -1,12 +1,5 @@
 package com.optimagrowth.license.service;
 
-import java.util.List;
-import java.util.UUID;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.MessageSource;
-import org.springframework.stereotype.Service;
-
 import com.optimagrowth.license.config.ServiceConfig;
 import com.optimagrowth.license.model.License;
 import com.optimagrowth.license.model.Organization;
@@ -14,6 +7,18 @@ import com.optimagrowth.license.repository.LicenseRepository;
 import com.optimagrowth.license.service.client.OrganizationDiscoveryClient;
 import com.optimagrowth.license.service.client.OrganizationFeignClient;
 import com.optimagrowth.license.service.client.OrganizationRestTemplateClient;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.MessageSource;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.TimeoutException;
+
 
 @Service
 public class LicenseService {
@@ -36,6 +41,12 @@ public class LicenseService {
 	@Autowired
 	OrganizationDiscoveryClient organizationDiscoveryClient;
 
+	@Autowired
+	CircuitBreakerRegistry registry;
+
+
+	private static final Logger logger = LoggerFactory.getLogger(LicenseService.class);
+
 	public License getLicense(String licenseId, String organizationId, String clientType){
 		License license = licenseRepository.findByOrganizationIdAndLicenseId(organizationId, licenseId);
 		if (null == license) {
@@ -53,26 +64,28 @@ public class LicenseService {
 		return license.withComment(config.getProperty());
 	}
 
+	@CircuitBreaker(name = "organizationService")
 	private Organization retrieveOrganizationInfo(String organizationId, String clientType) {
 		Organization organization = null;
+		organization = organizationRestClient.getOrganization(organizationId);
 
-		switch (clientType) {
-		case "feign":
-			System.out.println("I am using the feign client");
-			organization = organizationFeignClient.getOrganization(organizationId);
-			break;
-		case "rest":
-			System.out.println("I am using the rest client");
-			organization = organizationRestClient.getOrganization(organizationId);
-			break;
-		case "discovery":
-			System.out.println("I am using the discovery client");
-			organization = organizationDiscoveryClient.getOrganization(organizationId);
-			break;
-		default:
-			organization = organizationRestClient.getOrganization(organizationId);
-		}
-
+//		switch (clientType) {
+//		case "feign":
+//			System.out.println("I am using the feign client");
+//			organization = organizationFeignClient.getOrganization(organizationId);
+//			break;
+//		case "rest":
+//			System.out.println("I am using the rest client");
+//			organization = organizationRestClient.getOrganization(organizationId);
+//			break;
+//		case "discovery":
+//			System.out.println("I am using the discovery client");
+//			organization = organizationDiscoveryClient.getOrganization(organizationId);
+//			break;
+//		default:
+//			organization = organizationRestClient.getOrganization(organizationId);
+//		}
+//
 		return organization;
 	}
 
@@ -99,7 +112,31 @@ public class LicenseService {
 
 	}
 
-	public List<License> getLicensesByOrganization(String organizationId) {
+	@CircuitBreaker(name = "licenseService")
+	public List<License> getLicensesByOrganization(String organizationId) throws TimeoutException {
+		logger.debug("**********************");
+		System.out.println("***************************************");
+		System.out.println(registry.circuitBreaker("licenseService").getState());
+		System.out.println(registry.circuitBreaker("licenseService").getMetrics().getFailureRate());
+		System.out.println(registry.circuitBreaker("licenseService").getMetrics().getNumberOfFailedCalls());
+		System.out.println(registry.circuitBreaker("licenseService").getMetrics().getNumberOfSuccessfulCalls());
+		System.out.println(registry.circuitBreaker("licenseService").getMetrics().getNumberOfBufferedCalls());
+		System.out.println("**********************");
+		randomlyRunLong();
 		return licenseRepository.findByOrganizationId(organizationId);
+	}
+
+	private void randomlyRunLong() throws TimeoutException{
+//		Random rand = new Random();
+//		int randomNum = rand.nextInt(2) + 1;
+		sleep();
+	}
+	private void sleep() throws TimeoutException {
+		try {
+			Thread.sleep(1000);
+			throw new java.util.concurrent.TimeoutException();
+		} catch (InterruptedException e) {
+			logger.error(e.getMessage());
+		}
 	}
 }
